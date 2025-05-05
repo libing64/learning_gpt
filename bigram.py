@@ -84,17 +84,21 @@ class MultiHeadAttention(nn.Module):
   def __init__(self, num_heads, head_size):
     super().__init__()
     self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+    self.proj = nn.Linear(n_embd, n_embd)
      
   def forward(self, x):
-    return torch.cat([h(x) for h in self.heads], dim=-1)   
+    out = torch.cat([h(x) for h in self.heads], dim = -1)
+    out = self.proj(out)
+    return out
 
 class FeedFoward(nn.Module):
   """ a simple linear layer followed by a non-linearity """
   def __init__(self, n_embd):
     super().__init__()
     self.net = nn.Sequential(
-      nn.Linear(n_embd, n_embd),
+      nn.Linear(n_embd, 4 * n_embd),
       nn.ReLU(),
+      nn.Linear(4 * n_embd, n_embd),
     )
   def forward(self, x):
     return self.net(x)
@@ -110,8 +114,8 @@ class Block(nn.Module):
     self.ffwd = FeedFoward(n_embd)
   
   def forward(self, x):
-    x = self.sa(x)
-    x = self.ffwd(x)
+    x = x + self.sa(x)
+    x = x + self.ffwd(x)
     return x
 
 # super simple bigram model
@@ -138,7 +142,6 @@ class BigramLanguageModel(nn.Module):
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # T, C
         x = tok_emb + pos_emb # (B, T, C)
         x = self.blocks(x) # (B, T, C)
-        x = self.ffwd(x) #(B, T, C)
         logits = self.lm_head(x) #(B, T, vocab_size) 
 
         if targets is None:
@@ -177,7 +180,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 for iter in range(max_iters):
 
     # every once in a while evaluate the loss on train and val sets
-    if iter % eval_interval == 0:
+    if iter % eval_interval == 0 or iter == max_iters - 1:
         losses = estimate_loss()
         print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
 
